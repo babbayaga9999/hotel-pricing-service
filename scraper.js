@@ -534,7 +534,11 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
     result.prices = parsedPrices;
     result.success = parsedPrices.length > 0;
     if (!result.success) {
-      result.error = 'No pricing rows could be parsed from the detail view. Google might have blocked or modified the selectors.';
+      const pageTitle = await page.title();
+      const pageUrl = page.url();
+      const bodySnippet = (await page.innerText('body')).substring(0, 300).replace(/\s+/g, ' ');
+      console.log(`[Debug Cloud Fail] Hotel: ${hotel.name} | Title: "${pageTitle}" | URL: ${pageUrl} | Body: ${bodySnippet}`);
+      result.error = `No pricing rows parsed. Page Title: "${pageTitle}". URL: ${pageUrl}. Body snippet: ${bodySnippet}`;
     }
     console.log(`Successfully scraped ${parsedPrices.length} options for ${hotel.name} (Dates: ${result.checkIn} - ${result.checkOut})`);
 
