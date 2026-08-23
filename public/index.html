@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OTA Rate Intelligence - Dashboard</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Flatpickr Date Picker CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+</head>
+<body>
+  <div class="glass-bg"></div>
+  
+  <div class="container">
+    <!-- Header -->
+    <header class="header animate-fade-in">
+      <div class="header-content">
+        <div class="brand">
+          <div class="brand-logo">
+            <svg viewBox="0 0 24 24" width="24" height="24">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" fill="currentColor"/>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <h1>Orion Intelligence</h1>
+            <p>Real-time OTA Rate Comparison Dashboard</p>
+          </div>
+        </div>
+        <div class="status-panel" id="global-status-panel">
+          <span class="status-indicator idle" id="status-badge">● Idle</span>
+          <span class="timestamp" id="last-update-time">Last update: Never</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Grid Layout -->
+    <main class="dashboard-grid">
+      <!-- Left Column: Control Panel & Logs -->
+      <section class="dashboard-card card-control animate-slide-up">
+        <div class="card-header">
+          <h2>Scraper Controls</h2>
+          <span class="card-subtitle">Manage intelligence gathering runs</span>
+        </div>
+        <!-- Date Selector Fields -->
+        <div class="date-selector-container">
+          <div class="form-group">
+            <label for="scrape-checkin">Check-in Date</label>
+            <input type="text" id="scrape-checkin" placeholder="Select check-in" required>
+          </div>
+          <div class="form-group">
+            <label for="scrape-checkout">Check-out Date</label>
+            <input type="text" id="scrape-checkout" placeholder="Select check-out" required>
+          </div>
+        </div>
+
+        <div class="control-actions">
+          <button class="btn btn-primary" id="btn-run-scraper">
+            <svg class="icon" viewBox="0 0 24 24" width="18" height="18">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" fill="currentColor"/>
+            </svg>
+            Start Scraping Job
+          </button>
+          
+          <button class="btn btn-secondary" id="btn-export-csv" disabled>
+            <svg class="icon" viewBox="0 0 24 24" width="18" height="18">
+              <path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z" fill="currentColor"/>
+            </svg>
+            Export to CSV
+          </button>
+        </div>
+
+        <!-- Progress Tracker -->
+        <div class="progress-container hidden" id="progress-wrapper">
+          <div class="progress-details">
+            <span class="progress-label" id="progress-hotel-name">Scraping: Hotel Name</span>
+            <span class="progress-percent" id="progress-val-text">0%</span>
+          </div>
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progress-bar-fill" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Logs Console -->
+        <div class="console-wrapper">
+          <div class="console-header">
+            <span>Terminal Logs</span>
+            <button class="btn-clear-console" id="btn-clear-logs">Clear</button>
+          </div>
+          <div class="console-log-area" id="console-logs">
+            <div class="log-entry system">System initialized. Click "Start Scraping Job" to begin.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Comparison Table -->
+      <section class="dashboard-card card-data animate-slide-up" style="animation-delay: 0.1s;">
+        <div class="card-header">
+          <h2>Pricing Intelligence Matrix</h2>
+          <span class="card-subtitle">Real-time price comparisons across active online booking platforms</span>
+        </div>
+        
+        <div class="table-container">
+          <table class="price-matrix" id="comparison-table">
+            <thead>
+              <tr>
+                <th>Hotel Name</th>
+                <th>Booking.com</th>
+                <th>Agoda</th>
+                <th>MakeMyTrip</th>
+                <th>Official Site</th>
+                <th>Cheapest Rate</th>
+                <th>All Rates & Sources</th>
+                <th>Max Savings</th>
+              </tr>
+            </thead>
+            <tbody id="comparison-tbody">
+              <tr>
+                <td colspan="7" class="table-placeholder">
+                  <div class="placeholder-content">
+                    <svg viewBox="0 0 24 24" width="48" height="48" class="pulse-icon">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="currentColor"/>
+                    </svg>
+                    <p>No pricing intelligence loaded. Run the scraper or import hotels to populate details.</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Bottom Panel: Hotel Management -->
+      <section class="dashboard-card card-management animate-slide-up" style="animation-delay: 0.2s;">
+        <div class="card-header">
+          <h2>Hotel Registry</h2>
+          <span class="card-subtitle">Add or remove hotels from target scraper registry</span>
+        </div>
+        
+        <div class="management-layout">
+          <!-- Add Hotel Form -->
+          <form class="add-hotel-form" id="add-hotel-form">
+            <h3>Add Target Hotel</h3>
+            <div class="form-group">
+              <label for="hotel-name">Hotel Name</label>
+              <input type="text" id="hotel-name" placeholder="e.g. The Orion Elite" required>
+            </div>
+            <div class="form-group">
+              <label for="hotel-url">Google Hotels Search URL</label>
+              <input type="url" id="hotel-url" placeholder="https://www.google.com/travel/search?q=..." required>
+            </div>
+            <button type="submit" class="btn btn-submit">Add Hotel</button>
+          </form>
+
+          <!-- Active Hotel List -->
+          <div class="registry-list-wrapper">
+            <h3>Registered Hotels (<span id="hotel-count">0</span>)</h3>
+            <div class="registry-list-container">
+              <table class="registry-table">
+                <thead>
+                  <tr>
+                    <th>Hotel Name</th>
+                    <th>Google Search Link</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="registry-tbody">
+                  <!-- Generated dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="app.js"></script>
+</body>
+</html>

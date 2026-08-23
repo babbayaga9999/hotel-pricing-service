@@ -1,0 +1,8 @@
+node_modules/
+.system_generated/
+*.log
+data/results.json
+.git/
+flatpickr.js
+*.png
+.user_uploaded/
