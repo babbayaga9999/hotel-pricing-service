@@ -439,7 +439,7 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
               partner = 'Official Site';
             }
 
-            const priceRegex = /[₹$]\s*[0-9,]+/g;
+            const priceRegex = /[₹$€£]\s*[0-9,.]+|[0-9,.]+\s*(?:EUR|USD|INR|GBP)/g;
             const prices = containerText.match(priceRegex) || [];
             
             if (partner && prices.length > 0) {
@@ -473,7 +473,7 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
             const text = (c.textContent || '').trim().replace(/\s+/g, ' ');
             
             if (aria.includes('Prices starting from') || text.includes('Agoda') || text.includes('Booking.com') || text.includes('MakeMyTrip') || text.includes('Goibibo')) {
-              const priceMatch = text.match(/[₹$]\s*[0-9,]+/);
+              const priceMatch = text.match(/[₹$€£]\s*[0-9,.]+|[0-9,.]+\s*(?:EUR|USD|INR|GBP)/);
               if (priceMatch) {
                 const priceVal = priceMatch[0].replace(/\s+/g, '');
                 let partner = 'Google Travel Rate';
