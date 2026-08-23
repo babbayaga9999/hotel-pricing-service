@@ -148,16 +148,31 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
 
     browser = await chromium.launch(launchOptions);
 
-    // Create context with realistic Chrome User-Agent fingerprint
+    // Create context with realistic Chrome User-Agent fingerprint and Indian headers
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       viewport: { width: 1366, height: 768 },
       locale: 'en-IN',
       timezoneId: 'Asia/Kolkata',
+      extraHTTPHeaders: {
+        'Accept-Language': 'en-IN,en-US;q=0.9,en;q=0.8,hi;q=0.7',
+      }
     });
 
-    // Pre-inject consent cookies to bypass Google's consent wall on cloud IPs
+    // Pre-inject consent and INR currency preference cookies to force Indian OTAs and INR rates
     await context.addCookies([
+      {
+        name: 'PREF',
+        value: 'f6=40000&hl=en-IN&gl=in&curr=INR',
+        domain: '.google.com',
+        path: '/',
+      },
+      {
+        name: 'PREF',
+        value: 'f6=40000&hl=en-IN&gl=in&curr=INR',
+        domain: '.google.co.in',
+        path: '/',
+      },
       {
         name: 'SOCS',
         value: 'CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjMwODI5MDEwMDAwUgJlbhgCGgYIgJnPpwY',
@@ -517,6 +532,26 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
       await page.waitForTimeout(6000);
       parsedPrices = await parsePricesFromPage();
     }
+
+    // Convert any non-INR cloud rates (e.g., € or $) to INR (₹)
+    parsedPrices = parsedPrices.map(item => {
+      let raw = item.rawPrice;
+      let display = item.price;
+      if (display.includes('€')) {
+        raw = Math.round(raw * 90);
+        display = `₹${raw.toLocaleString('en-IN')}`;
+      } else if (display.includes('$')) {
+        raw = Math.round(raw * 83);
+        display = `₹${raw.toLocaleString('en-IN')}`;
+      } else if (display.includes('£')) {
+        raw = Math.round(raw * 105);
+        display = `₹${raw.toLocaleString('en-IN')}`;
+      } else if (!display.includes('₹')) {
+        display = `₹${raw.toLocaleString('en-IN')}`;
+      }
+      return { partner: item.partner, price: display, rawPrice: raw };
+    });
+    parsedPrices.sort((a, b) => a.rawPrice - b.rawPrice);
 
     // Extract dates metadata
     const dates = await page.evaluate(() => {
