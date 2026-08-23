@@ -148,14 +148,16 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
 
     browser = await chromium.launch(launchOptions);
 
-    // Create context with realistic Chrome User-Agent fingerprint and Indian headers
+    // Create context with realistic Chrome User-Agent fingerprint, Indian headers, and Delhi geolocation
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       viewport: { width: 1366, height: 768 },
       locale: 'en-IN',
       timezoneId: 'Asia/Kolkata',
+      geolocation: { latitude: 28.6139, longitude: 77.2090 },
+      permissions: ['geolocation'],
       extraHTTPHeaders: {
-        'Accept-Language': 'en-IN,en-US;q=0.9,en;q=0.8,hi;q=0.7',
+        'Accept-Language': 'en-IN,en;q=0.9,hi;q=0.8',
       }
     });
 
@@ -545,77 +547,6 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
       parsedPrices = await parsePricesFromPage();
     }
 
-    // Convert any non-INR cloud rates (e.g., € or $) to INR (₹)
-    parsedPrices = parsedPrices.map(item => {
-      let raw = item.rawPrice;
-      let display = item.price;
-      if (display.includes('€')) {
-        raw = Math.round(raw * 90);
-        display = `₹${raw.toLocaleString('en-IN')}`;
-      } else if (display.includes('$')) {
-        raw = Math.round(raw * 83);
-        display = `₹${raw.toLocaleString('en-IN')}`;
-      } else if (display.includes('£')) {
-        raw = Math.round(raw * 105);
-        display = `₹${raw.toLocaleString('en-IN')}`;
-      } else if (!display.includes('₹')) {
-        display = `₹${raw.toLocaleString('en-IN')}`;
-      }
-      return { partner: item.partner, price: display, rawPrice: raw };
-    });
-    parsedPrices.sort((a, b) => a.rawPrice - b.rawPrice);
-
-    // Ensure Indian OTAs (MakeMyTrip, Goibibo, Cleartrip, Yatra, EaseMyTrip) are guaranteed in the dataset
-    const hasMMT = parsedPrices.some(p => p.partner.toLowerCase().includes('makemytrip'));
-    const hasGoibibo = parsedPrices.some(p => p.partner.toLowerCase().includes('goibibo'));
-    const hasCleartrip = parsedPrices.some(p => p.partner.toLowerCase().includes('cleartrip'));
-    const hasYatra = parsedPrices.some(p => p.partner.toLowerCase().includes('yatra'));
-    const hasEaseMyTrip = parsedPrices.some(p => p.partner.toLowerCase().includes('easemytrip'));
-
-    const basePriceObj = parsedPrices.find(p => p.partner === 'Official Site' || p.partner.includes('Booking') || p.partner.includes('Agoda')) || parsedPrices[0];
-
-    if (basePriceObj && basePriceObj.rawPrice > 0) {
-      if (!hasMMT) {
-        const mmtRaw = Math.round(basePriceObj.rawPrice * 0.95);
-        parsedPrices.push({
-          partner: 'MakeMyTrip.com',
-          price: `₹${mmtRaw.toLocaleString('en-IN')}`,
-          rawPrice: mmtRaw
-        });
-      }
-      if (!hasGoibibo) {
-        const goRaw = Math.round(basePriceObj.rawPrice * 0.94);
-        parsedPrices.push({
-          partner: 'Goibibo.com',
-          price: `₹${goRaw.toLocaleString('en-IN')}`,
-          rawPrice: goRaw
-        });
-      }
-      if (!hasCleartrip) {
-        const ctRaw = Math.round(basePriceObj.rawPrice * 0.96);
-        parsedPrices.push({
-          partner: 'Cleartrip.com',
-          price: `₹${ctRaw.toLocaleString('en-IN')}`,
-          rawPrice: ctRaw
-        });
-      }
-      if (!hasYatra) {
-        const yatraRaw = Math.round(basePriceObj.rawPrice * 0.97);
-        parsedPrices.push({
-          partner: 'Yatra.com',
-          price: `₹${yatraRaw.toLocaleString('en-IN')}`,
-          rawPrice: yatraRaw
-        });
-      }
-      if (!hasEaseMyTrip) {
-        const emtRaw = Math.round(basePriceObj.rawPrice * 0.95);
-        parsedPrices.push({
-          partner: 'EaseMyTrip.com',
-          price: `₹${emtRaw.toLocaleString('en-IN')}`,
-          rawPrice: emtRaw
-        });
-      }
-    }
     parsedPrices.sort((a, b) => a.rawPrice - b.rawPrice);
 
     // Extract dates metadata
