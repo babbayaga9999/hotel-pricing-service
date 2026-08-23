@@ -401,6 +401,18 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
 
     // Helper function to parse pricing options from page
     const parsePricesFromPage = async () => {
+      // Auto-click "View all prices" / "All rates" / "Show more prices" buttons to reveal MakeMyTrip, Goibibo, Cleartrip, Yatra, EaseMyTrip
+      await page.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
+        const expandBtns = buttons.filter(b => {
+          const txt = (b.textContent || '').trim().toLowerCase();
+          const aria = (b.getAttribute('aria-label') || '').toLowerCase();
+          return txt.includes('view all prices') || txt.includes('all prices') || txt.includes('more prices') || txt.includes('all rates') || aria.includes('view all prices') || aria.includes('all prices');
+        });
+        expandBtns.forEach(b => b.click());
+      });
+      await page.waitForTimeout(1500);
+
       const resList = await page.evaluate(() => {
         const list = [];
         const seen = new Set();

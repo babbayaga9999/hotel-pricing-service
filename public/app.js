@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let scrapeResults = {};
 
   // Standard OTAs we want to compare in columns
-  const standardOTAs = ['Booking.com', 'Agoda', 'MakeMyTrip.com', 'Official Site'];
+  const standardOTAs = ['MakeMyTrip', 'Goibibo', 'Booking.com', 'Agoda', 'Cleartrip', 'Yatra', 'EaseMyTrip', 'Official Site'];
 
   // Initialize
   init();
@@ -378,7 +378,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!result) {
         // No results yet for this hotel
         const pendingTd = document.createElement('td');
-        pendingTd.colSpan = 7;
+        pendingTd.colSpan = 10;
         pendingTd.className = 'table-placeholder';
         pendingTd.style.padding = '0.5rem';
         pendingTd.style.color = 'var(--text-muted)';
@@ -391,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!result.success) {
         // Failed scraping run
         const errorTd = document.createElement('td');
-        errorTd.colSpan = 7;
+        errorTd.colSpan = 10;
         errorTd.className = 'price-cell error';
         errorTd.textContent = result.error || 'Failed to fetch details.';
         tr.appendChild(errorTd);
@@ -400,12 +400,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // We have successful prices!
-      // Map standard partner names to their extracted prices
-      const partnerPrices = {};
-      result.prices.forEach(p => {
-        partnerPrices[p.partner] = p;
-      });
-
       // Find the absolute cheapest rate overall
       let cheapestVal = Infinity;
       let cheapestPartner = '';
@@ -417,12 +411,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // Render cells for standard columns (Booking, Agoda, MakeMyTrip, Official Site)
+      // Render cells for standard columns (MakeMyTrip, Goibibo, Booking.com, Agoda, Cleartrip, Yatra, EaseMyTrip, Official Site)
       standardOTAs.forEach(ota => {
         const td = document.createElement('td');
         td.className = 'price-cell';
 
-        const priceObj = partnerPrices[ota];
+        // Fuzzy matching for partner name
+        const priceObj = result.prices.find(p => {
+          const normP = p.partner.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const normT = ota.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return normP.includes(normT) || normT.includes(normP);
+        });
+
         if (priceObj) {
           td.textContent = priceObj.price;
           // Check if this OTA is the cheapest option
