@@ -65,6 +65,17 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
         get: () => undefined
       });
     });
+
+    // Verify external IP to ensure proxy routing is active
+    try {
+      const ipPage = await context.newPage();
+      await ipPage.goto('https://api.ipify.org?format=json', { timeout: 10000 });
+      const ipText = await ipPage.innerText('body');
+      console.log(`[Scraper Browser IP]: ${ipText.trim()}`);
+      await ipPage.close();
+    } catch (ipErr) {
+      console.log(`[Scraper Browser IP Check Failed]: ${ipErr.message}`);
+    }
     
     // Intercept routes to block only images and fonts (fully safe, avoids script blocking hangs)
     await page.route('**/*', (route) => {
