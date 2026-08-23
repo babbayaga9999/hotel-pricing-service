@@ -10,6 +10,9 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Silence favicon 404 logs
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 // File paths
 const HOTELS_FILE = path.join(__dirname, 'data', 'hotels.json');
 const RESULTS_FILE = path.join(__dirname, 'data', 'results.json');
