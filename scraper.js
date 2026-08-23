@@ -1,4 +1,6 @@
 const { chromium } = require('playwright-chromium');
+const fs = require('fs');
+const path = require('path');
 
 function formatGoogleDate(dateStr) {
   const d = new Date(dateStr);
@@ -29,15 +31,31 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
   try {
     browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled'
+      ]
     });
 
     const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1280, height: 800 }
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 800 },
+      locale: 'en-US',
+      timezoneId: 'America/New_York',
+      extraHTTPHeaders: {
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
     });
 
     const page = await context.newPage();
+    
+    // Override webdriver property to bypass bot detection
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined
+      });
+    });
     
     // Intercept routes to block only images and fonts (fully safe, avoids script blocking hangs)
     await page.route('**/*', (route) => {
@@ -134,6 +152,19 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
     }
 
     if (!isDetailView) {
+      // Capture screenshot for debugging
+      const screenshotDir = path.join(__dirname, 'public', 'screenshots');
+      if (!fs.existsSync(screenshotDir)) {
+        fs.mkdirSync(screenshotDir, { recursive: true });
+      }
+      const screenshotPath = path.join(screenshotDir, `${hotel.id}.png`);
+      try {
+        await page.screenshot({ path: screenshotPath });
+        console.log(`Saved failure screenshot for ${hotel.name} to public/screenshots/${hotel.id}.png`);
+      } catch (screenshotErr) {
+        console.error(`Failed to take screenshot for ${hotel.name}:`, screenshotErr.message);
+      }
+
       result.error = 'Could not access details view panel for this hotel. Google is showing general search results.';
       return result;
     }
