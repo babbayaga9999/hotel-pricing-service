@@ -39,10 +39,24 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
     };
 
     if (process.env.PROXY_URL) {
-      launchOptions.proxy = {
-        server: process.env.PROXY_URL
-      };
-      console.log(`Routing Playwright browser traffic through proxy...`);
+      try {
+        const urlObj = new URL(process.env.PROXY_URL);
+        launchOptions.proxy = {
+          server: `${urlObj.protocol}//${urlObj.host}`
+        };
+        if (urlObj.username) {
+          launchOptions.proxy.username = decodeURIComponent(urlObj.username);
+        }
+        if (urlObj.password) {
+          launchOptions.proxy.password = decodeURIComponent(urlObj.password);
+        }
+        console.log(`Routing Playwright browser traffic through proxy: ${urlObj.host}`);
+      } catch (err) {
+        console.warn(`Failed to parse PROXY_URL using URL parser, falling back to raw value:`, err.message);
+        launchOptions.proxy = {
+          server: process.env.PROXY_URL
+        };
+      }
     }
 
     browser = await chromium.launch(launchOptions);
