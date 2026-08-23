@@ -13,6 +13,24 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Silence favicon 404 logs
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
+// Debug endpoint: list all available failure screenshots and HTML dumps
+app.get('/api/debug/screenshots', (req, res) => {
+  const screenshotDir = path.join(__dirname, 'public', 'screenshots');
+  try {
+    if (!fs.existsSync(screenshotDir)) {
+      return res.json({ files: [], message: 'No screenshots directory found.' });
+    }
+    const files = fs.readdirSync(screenshotDir).map(f => ({
+      name: f,
+      url: `/screenshots/${f}`,
+      size: fs.statSync(path.join(screenshotDir, f)).size
+    }));
+    res.json({ files });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // File paths
 const HOTELS_FILE = path.join(__dirname, 'data', 'hotels.json');
 const RESULTS_FILE = path.join(__dirname, 'data', 'results.json');

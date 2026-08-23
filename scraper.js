@@ -10,6 +10,73 @@ function formatGoogleDate(dateStr) {
 }
 
 /**
+ * Dismiss Google consent banners if present.
+ * Google serves "Before you continue" consent pages on datacenter IPs.
+ * We handle this by:
+ *  1. Pre-injecting SOCS and CONSENT cookies to signal acceptance
+ *  2. Clicking any visible consent buttons as a fallback
+ */
+async function dismissConsentBanner(page) {
+  try {
+    // Look for consent buttons in the main page
+    const consentSelectors = [
+      'button:has-text("Accept all")',
+      'button:has-text("Accept All")',
+      'button:has-text("I agree")',
+      'button:has-text("Agree")',
+      'button:has-text("Yes, I agree")',
+      'button:has-text("Consent")',
+      '[aria-label="Accept all"]',
+      '[aria-label="Accept All"]',
+      '#L2AGLb', // Common Google consent button ID
+      '.tHlp8d',  // Another common consent class
+    ];
+
+    for (const selector of consentSelectors) {
+      try {
+        const button = page.locator(selector).first();
+        if (await button.isVisible({ timeout: 1000 })) {
+          await button.click();
+          console.log(`[Consent] Dismissed consent banner via selector: ${selector}`);
+          await page.waitForTimeout(2000);
+          return true;
+        }
+      } catch {
+        // Selector not found, try next
+      }
+    }
+
+    // Check for consent inside iframes (Google sometimes uses iframe for consent)
+    const frames = page.frames();
+    for (const frame of frames) {
+      try {
+        const frameUrl = frame.url();
+        if (frameUrl.includes('consent.google.com') || frameUrl.includes('consent')) {
+          for (const selector of consentSelectors) {
+            try {
+              const button = frame.locator(selector).first();
+              if (await button.isVisible({ timeout: 1000 })) {
+                await button.click();
+                console.log(`[Consent] Dismissed consent banner in iframe via: ${selector}`);
+                await page.waitForTimeout(2000);
+                return true;
+              }
+            } catch {
+              // Try next selector
+            }
+          }
+        }
+      } catch {
+        // Frame may have detached
+      }
+    }
+  } catch (err) {
+    console.log(`[Consent] Error while trying to dismiss consent: ${err.message}`);
+  }
+  return false;
+}
+
+/**
  * Scrapes prices for a single hotel from its Google Travel URL.
  * @param {Object} hotel - Hotel object containing name and url.
  * @param {string} [targetCheckIn] - Target check-in date in YYYY-MM-DD format.
@@ -34,7 +101,23 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled'
+        '--disable-blink-features=AutomationControlled',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-extensions',
+        '--disable-component-extensions-with-background-pages',
+        '--disable-default-apps',
+        '--disable-features=TranslateUI',
+        '--disable-hang-monitor',
+        '--disable-popup-blocking',
+        '--disable-prompt-on-repost',
+        '--disable-sync',
+        '--metrics-recording-only',
+        '--no-default-browser-check',
+        '--password-store=basic',
       ]
     };
 
@@ -62,23 +145,96 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
 
     browser = await chromium.launch(launchOptions);
 
+    // Create context with a realistic, modern Chrome fingerprint
     const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      viewport: { width: 1280, height: 800 },
-      locale: 'en-US',
-      timezoneId: 'America/New_York',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      viewport: { width: 1366, height: 768 },
+      screen: { width: 1920, height: 1080 },
+      locale: 'en-IN',
+      timezoneId: 'Asia/Kolkata',
+      deviceScaleFactor: 1,
+      hasTouch: false,
+      isMobile: false,
+      javaScriptEnabled: true,
       extraHTTPHeaders: {
-        'Accept-Language': 'en-US,en;q=0.9'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-IN,en;q=0.9,hi;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-CH-UA': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+        'Sec-CH-UA-Mobile': '?0',
+        'Sec-CH-UA-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
       }
     });
 
+    // Pre-inject consent cookies to bypass Google's consent wall
+    await context.addCookies([
+      {
+        name: 'SOCS',
+        value: 'CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjMwODI5MDEwMDAwUgJlbhgCGgYIgJnPpwY',
+        domain: '.google.com',
+        path: '/',
+      },
+      {
+        name: 'CONSENT',
+        value: 'PENDING+987',
+        domain: '.google.com',
+        path: '/',
+      },
+      {
+        name: 'SOCS',
+        value: 'CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjMwODI5MDEwMDAwUgJlbhgCGgYIgJnPpwY',
+        domain: '.google.co.in',
+        path: '/',
+      },
+      {
+        name: 'CONSENT',
+        value: 'PENDING+987',
+        domain: '.google.co.in',
+        path: '/',
+      },
+    ]);
+
     const page = await context.newPage();
     
-    // Override webdriver property to bypass bot detection
+    // Comprehensive stealth: override all common automation detection vectors
     await page.addInitScript(() => {
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => undefined
+      // Remove webdriver flag
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      
+      // Override plugins to look like a real Chrome browser
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => {
+          return [
+            { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+            { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+            { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
+          ];
+        },
       });
+      
+      // Override languages
+      Object.defineProperty(navigator, 'languages', { get: () => ['en-IN', 'en', 'hi'] });
+      
+      // Fix chrome runtime detection
+      window.chrome = {
+        runtime: { onConnect: { addListener: () => {}, removeListener: () => {} } },
+        loadTimes: () => ({}),
+        csi: () => ({}),
+      };
+      
+      // Override permissions query
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters) =>
+        parameters.name === 'notifications'
+          ? Promise.resolve({ state: Notification.permission })
+          : originalQuery(parameters);
     });
 
     // Verify external IP to ensure proxy routing is active
@@ -102,17 +258,59 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
       }
     });
 
-    // Set navigation timeout to 30s for safety
-    page.setDefaultTimeout(30000);
+    // Set navigation timeout to 45s for cloud environments
+    page.setDefaultTimeout(45000);
 
-    console.log(`Navigating to Google Hotels search: ${hotel.url}`);
-    await page.goto(hotel.url, { waitUntil: 'domcontentloaded' });
+    // STEP 1: First navigate to Google.com to establish cookies and session
+    console.log(`[Step 1] Warming up Google session...`);
+    try {
+      await page.goto('https://www.google.com/', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.waitForTimeout(1500);
+      
+      // Dismiss any consent banner that appears
+      await dismissConsentBanner(page);
+      await page.waitForTimeout(1000);
+    } catch (warmupErr) {
+      console.log(`[Step 1] Warmup navigation warning: ${warmupErr.message}`);
+    }
+
+    // STEP 2: Navigate to the hotel search URL
+    console.log(`[Step 2] Navigating to Google Hotels search: ${hotel.url}`);
+    await page.goto(hotel.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     
     // Wait for initial static layout to settle
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(4000);
+    
+    // Dismiss consent if it appeared again after redirect
+    await dismissConsentBanner(page);
+    await page.waitForTimeout(1000);
+
+    // Check if we got redirected to consent.google.com
+    const currentUrl = page.url();
+    console.log(`[Step 2] Current URL after navigation: ${currentUrl}`);
+    if (currentUrl.includes('consent.google.com')) {
+      console.log(`[Step 2] Redirected to consent page, attempting to dismiss...`);
+      await dismissConsentBanner(page);
+      await page.waitForTimeout(3000);
+      
+      // If still on consent page, try to navigate directly again
+      if (page.url().includes('consent.google.com')) {
+        console.log(`[Step 2] Still on consent page, retrying navigation...`);
+        await page.goto(hotel.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.waitForTimeout(4000);
+      }
+    }
+
+    // Log page title and a snippet of the page content for debugging
+    const pageTitle = await page.title();
+    console.log(`[Debug] Page title: ${pageTitle}`);
     
     let bodyText = await page.innerText('body');
     let bodyLower = bodyText.toLowerCase();
+    
+    // Log first 300 chars of body for debugging
+    console.log(`[Debug] Page body preview: ${bodyText.substring(0, 300).replace(/\n/g, ' ')}`);
+    
     let isDetailView = bodyLower.includes('overview') && (bodyLower.includes('prices') || bodyLower.includes('about') || bodyLower.includes('reviews'));
     
     if (!isDetailView) {
@@ -183,6 +381,53 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
         isDetailView = bodyLower.includes('overview') && (bodyLower.includes('prices') || bodyLower.includes('about') || bodyLower.includes('reviews'));
       } else {
         console.log(`✗ Failed to locate hotel card for "${hotel.name}" in search results.`);
+        
+        // RETRY: Try a simplified search query URL
+        const simpleName = hotel.name.replace(/by orion hotels?/gi, '').trim();
+        const simpleUrl = `https://www.google.com/travel/search?q=${encodeURIComponent(simpleName)}&hl=en-IN&gl=in`;
+        console.log(`[Retry] Trying simplified URL: ${simpleUrl}`);
+        
+        await page.goto(simpleUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.waitForTimeout(4000);
+        await dismissConsentBanner(page);
+        
+        bodyText = await page.innerText('body');
+        bodyLower = bodyText.toLowerCase();
+        isDetailView = bodyLower.includes('overview') && (bodyLower.includes('prices') || bodyLower.includes('about') || bodyLower.includes('reviews'));
+        
+        if (!isDetailView) {
+          // Try clicking on first h2 match again
+          const retryClicked = await page.evaluate((name) => {
+            const headings = Array.from(document.querySelectorAll('h2'));
+            const cleanName = name.toLowerCase();
+            const allWords = cleanName.replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean);
+            const fillers = ['hotels', 'hotel', 'delhi', 'mumbai', 'by', 'orion', 'the', 'inn', 'suites', 'homestay', 'junction'];
+            const keywords = allWords.filter(w => w.length >= 2 && !fillers.includes(w));
+            const finalKeywords = keywords.length > 0 ? keywords : allWords.filter(w => w.length >= 2).slice(0, 2);
+            
+            for (const h2 of headings) {
+              const h2Text = h2.textContent.toLowerCase();
+              if (finalKeywords.every(kw => h2Text.includes(kw))) {
+                const anchor = h2.closest('a');
+                if (anchor) { anchor.click(); } else { h2.click(); }
+                return true;
+              }
+            }
+            // If no keyword match, try clicking the very first hotel card
+            if (headings.length > 0) {
+              const anchor = headings[0].closest('a');
+              if (anchor) { anchor.click(); return true; }
+            }
+            return false;
+          }, hotel.name);
+          
+          if (retryClicked) {
+            await page.waitForTimeout(5000);
+            bodyText = await page.innerText('body');
+            bodyLower = bodyText.toLowerCase();
+            isDetailView = bodyLower.includes('overview') && (bodyLower.includes('prices') || bodyLower.includes('about') || bodyLower.includes('reviews'));
+          }
+        }
       }
     }
 
@@ -194,13 +439,23 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
       }
       const screenshotPath = path.join(screenshotDir, `${hotel.id}.png`);
       try {
-        await page.screenshot({ path: screenshotPath });
+        await page.screenshot({ path: screenshotPath, fullPage: true });
         console.log(`Saved failure screenshot for ${hotel.name} to public/screenshots/${hotel.id}.png`);
       } catch (screenshotErr) {
         console.error(`Failed to take screenshot for ${hotel.name}:`, screenshotErr.message);
       }
+      
+      // Also save the full HTML for debugging
+      try {
+        const htmlContent = await page.content();
+        const htmlPath = path.join(screenshotDir, `${hotel.id}.html`);
+        fs.writeFileSync(htmlPath, htmlContent, 'utf8');
+        console.log(`Saved failure HTML for ${hotel.name} to public/screenshots/${hotel.id}.html`);
+      } catch (htmlErr) {
+        console.error(`Failed to save HTML for ${hotel.name}:`, htmlErr.message);
+      }
 
-      result.error = 'Could not access details view panel for this hotel. Google is showing general search results.';
+      result.error = `Could not access details view panel. Page title: "${pageTitle}". URL: ${page.url()}. Body preview: ${bodyText.substring(0, 200)}`;
       return result;
     }
 
