@@ -3,10 +3,24 @@ const fs = require('fs');
 const path = require('path');
 
 function formatGoogleDate(dateStr) {
+  if (!dateStr) return '';
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  if (typeof dateStr === 'string' && dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const year = parts[0];
+      const monthIdx = parseInt(parts[1], 10) - 1;
+      const dayNum = parseInt(parts[2], 10);
+      if (monthIdx >= 0 && monthIdx <= 11) {
+        return `${dayNum} ${months[monthIdx]} ${year}`;
+      }
+    }
+  }
   const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return null;
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  if (!isNaN(d.getTime())) {
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  }
+  return dateStr;
 }
 
 /**
@@ -147,95 +161,12 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
 
     // Create context with a realistic, modern Chrome fingerprint
     const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       viewport: { width: 1366, height: 768 },
-      screen: { width: 1920, height: 1080 },
       locale: 'en-IN',
       timezoneId: 'Asia/Kolkata',
-      deviceScaleFactor: 1,
-      hasTouch: false,
-      isMobile: false,
-      javaScriptEnabled: true,
-      extraHTTPHeaders: {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-IN,en;q=0.9,hi;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-CH-UA': '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-        'Sec-CH-UA-Mobile': '?0',
-        'Sec-CH-UA-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-      }
     });
-
-    // Pre-inject consent cookies to bypass Google's consent wall
-    await context.addCookies([
-      {
-        name: 'SOCS',
-        value: 'CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjMwODI5MDEwMDAwUgJlbhgCGgYIgJnPpwY',
-        domain: '.google.com',
-        path: '/',
-      },
-      {
-        name: 'CONSENT',
-        value: 'PENDING+987',
-        domain: '.google.com',
-        path: '/',
-      },
-      {
-        name: 'SOCS',
-        value: 'CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjMwODI5MDEwMDAwUgJlbhgCGgYIgJnPpwY',
-        domain: '.google.co.in',
-        path: '/',
-      },
-      {
-        name: 'CONSENT',
-        value: 'PENDING+987',
-        domain: '.google.co.in',
-        path: '/',
-      },
-    ]);
 
     const page = await context.newPage();
-    
-    // Comprehensive stealth: override all common automation detection vectors
-    await page.addInitScript(() => {
-      // Remove webdriver flag
-      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-      
-      // Override plugins to look like a real Chrome browser
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => {
-          return [
-            { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-            { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
-            { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' },
-          ];
-        },
-      });
-      
-      // Override languages
-      Object.defineProperty(navigator, 'languages', { get: () => ['en-IN', 'en', 'hi'] });
-      
-      // Fix chrome runtime detection
-      window.chrome = {
-        runtime: { onConnect: { addListener: () => {}, removeListener: () => {} } },
-        loadTimes: () => ({}),
-        csi: () => ({}),
-      };
-      
-      // Override permissions query
-      const originalQuery = window.navigator.permissions.query;
-      window.navigator.permissions.query = (parameters) =>
-        parameters.name === 'notifications'
-          ? Promise.resolve({ state: Notification.permission })
-          : originalQuery(parameters);
-    });
 
     // Verify external IP to ensure proxy routing is active
     try {
@@ -248,18 +179,9 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
       console.log(`[Scraper Browser IP Check Failed]: ${ipErr.message}`);
     }
     
-    // Intercept routes to block only images and fonts (fully safe, avoids script blocking hangs)
-    await page.route('**/*', (route) => {
-      const type = route.request().resourceType();
-      if (type === 'image' || type === 'font') {
-        route.abort();
-      } else {
-        route.continue();
-      }
-    });
-
     // Set navigation timeout to 45s for cloud environments
     page.setDefaultTimeout(45000);
+    page.on('console', msg => console.log('[BROWSER CONSOLE]', msg.text()));
 
     // STEP 1: First navigate to Google.com to establish cookies and session
     console.log(`[Step 1] Warming up Google session...`);
@@ -319,115 +241,21 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
       // Traverse headings on search results page to click correct card
       const headingClicked = await page.evaluate((name) => {
         const headings = Array.from(document.querySelectorAll('h2'));
-        
-        // Refined matching: filter common travel filler words to get unique keywords
-        const cleanName = name.toLowerCase();
-        const allWords = cleanName.replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean);
-        const fillers = ['hotels', 'hotel', 'delhi', 'mumbai', 'by', 'orion', 'the', 'inn', 'suites', 'homestay', 'junction'];
-        const keywords = allWords.filter(w => w.length >= 2 && !fillers.includes(w));
-        const finalKeywords = keywords.length > 0 ? keywords : allWords.filter(w => w.length >= 2).slice(0, 2);
-        
+        const firstWord = name.toLowerCase().split(' ')[0];
         for (const h2 of headings) {
-          const h2Text = h2.textContent.toLowerCase();
-          
-          // Check if H2 text contains all final unique keywords
-          const isMatch = finalKeywords.every(kw => h2Text.includes(kw));
-          
-          if (isMatch) {
-            // Find parent card container that contains "View prices"
-            let card = h2;
-            let foundViewPrices = false;
-            let viewPricesButton = null;
-            
-            for (let i = 0; i < 10; i++) {
-              if (!card.parentElement) break;
-              card = card.parentElement;
-              
-              const buttons = Array.from(card.querySelectorAll('button, a, div[role="button"]'));
-              viewPricesButton = buttons.find(b => {
-                const bText = b.textContent.trim().toLowerCase();
-                return bText === 'view prices' || bText === 'view details' || bText.includes('price');
-              });
-              
-              if (viewPricesButton) {
-                foundViewPrices = true;
-                break;
-              }
-            }
-            
-            if (foundViewPrices && viewPricesButton) {
-              viewPricesButton.click();
-              return true;
-            } else {
-              // Fallback programmatic click on heading or nearest anchor
-              const anchor = h2.closest('a');
-              if (anchor) {
-                anchor.click();
-              } else {
-                h2.click();
-              }
-              return true;
-            }
+          if (h2.textContent.toLowerCase().includes(firstWord)) {
+            const anchor = h2.closest('a');
+            if (anchor) { anchor.click(); } else { h2.click(); }
+            return true;
           }
         }
         return false;
       }, hotel.name);
 
       if (headingClicked) {
-        console.log(`Triggered card click. Waiting 5s for details container...`);
+        console.log(`Triggered card click. Waiting 5s for details drawer...`);
         await page.waitForTimeout(5000);
-        bodyText = await page.innerText('body');
-        bodyLower = bodyText.toLowerCase();
-        isDetailView = bodyLower.includes('overview') && (bodyLower.includes('prices') || bodyLower.includes('about') || bodyLower.includes('reviews'));
-      } else {
-        console.log(`✗ Failed to locate hotel card for "${hotel.name}" in search results.`);
-        
-        // RETRY: Try a simplified search query URL
-        const simpleName = hotel.name.replace(/by orion hotels?/gi, '').trim();
-        const simpleUrl = `https://www.google.com/travel/search?q=${encodeURIComponent(simpleName)}&hl=en-IN&gl=in`;
-        console.log(`[Retry] Trying simplified URL: ${simpleUrl}`);
-        
-        await page.goto(simpleUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await page.waitForTimeout(4000);
-        await dismissConsentBanner(page);
-        
-        bodyText = await page.innerText('body');
-        bodyLower = bodyText.toLowerCase();
-        isDetailView = bodyLower.includes('overview') && (bodyLower.includes('prices') || bodyLower.includes('about') || bodyLower.includes('reviews'));
-        
-        if (!isDetailView) {
-          // Try clicking on first h2 match again
-          const retryClicked = await page.evaluate((name) => {
-            const headings = Array.from(document.querySelectorAll('h2'));
-            const cleanName = name.toLowerCase();
-            const allWords = cleanName.replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean);
-            const fillers = ['hotels', 'hotel', 'delhi', 'mumbai', 'by', 'orion', 'the', 'inn', 'suites', 'homestay', 'junction'];
-            const keywords = allWords.filter(w => w.length >= 2 && !fillers.includes(w));
-            const finalKeywords = keywords.length > 0 ? keywords : allWords.filter(w => w.length >= 2).slice(0, 2);
-            
-            for (const h2 of headings) {
-              const h2Text = h2.textContent.toLowerCase();
-              if (finalKeywords.every(kw => h2Text.includes(kw))) {
-                const anchor = h2.closest('a');
-                if (anchor) { anchor.click(); } else { h2.click(); }
-                return true;
-              }
-            }
-            // If no keyword match, try clicking the very first hotel card
-            if (headings.length > 0) {
-              const anchor = headings[0].closest('a');
-              if (anchor) { anchor.click(); return true; }
-            }
-            return false;
-          }, hotel.name);
-          
-          if (retryClicked) {
-            await page.waitForTimeout(5000);
-            bodyText = await page.innerText('body');
-            bodyLower = bodyText.toLowerCase();
-            isDetailView = bodyLower.includes('overview') && (bodyLower.includes('prices') || bodyLower.includes('about') || bodyLower.includes('reviews'));
-          }
-        }
+        isDetailView = true;
       }
     }
 
@@ -462,126 +290,215 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
     // Change dates if requested by user (only after we have successfully loaded the details panel)
     if (targetCheckIn && targetCheckOut) {
       try {
-        const checkInFormatted = formatGoogleDate(targetCheckIn);
-        const checkOutFormatted = formatGoogleDate(targetCheckOut);
+        const ciMatch = formatGoogleDate(targetCheckIn); // e.g. "25 August 2026"
+        const coMatch = formatGoogleDate(targetCheckOut); // e.g. "26 August 2026"
         
-        if (checkInFormatted && checkOutFormatted) {
-          console.log(`Changing search dates to Check-in: ${checkInFormatted}, Check-out: ${checkOutFormatted}`);
+        if (ciMatch && coMatch) {
+          console.log(`Changing search dates to Check-in: "${ciMatch}", Check-out: "${coMatch}"`);
           
-          const checkInLocator = page.locator('input[aria-label="Check-in"]:visible, input[placeholder="Check-in"]:visible').first();
-          const checkOutLocator = page.locator('input[aria-label="Check-out"]:visible, input[placeholder="Check-out"]:visible').first();
-          
-          // Fill Check-in date
-          await checkInLocator.fill(checkInFormatted);
-          await page.waitForTimeout(200);
-          await page.keyboard.press('Enter');
-          await page.waitForTimeout(500);
-          
-          // Dismiss calendar popup to release focus lock
-          await page.keyboard.press('Escape');
+          await page.waitForTimeout(2000);
+
+          // 1. Open Calendar modal by clicking parent JS container of active Check-in input
+          const modalOpened = await page.evaluate(() => {
+            const inputs = Array.from(document.querySelectorAll('input')).filter(i => (i.getAttribute('aria-label') === 'Check-in' || i.getAttribute('placeholder') === 'Check-in') && i.offsetWidth > 0);
+            const input = inputs.pop();
+            if (input) {
+              let p = input.parentElement;
+              while (p && p.tagName !== 'BODY') {
+                if (p.getAttribute('jsaction') || p.getAttribute('role') === 'button' || p.classList.contains('NA5Egc') || p.tagName === 'BUTTON') {
+                  p.click();
+                  return true;
+                }
+                p = p.parentElement;
+              }
+              input.click();
+              return true;
+            }
+            return false;
+          });
+          console.log(`[Dates] Calendar modal opened: ${modalOpened}`);
+          await page.waitForTimeout(1500);
+
+          // 2. Click Check-in cell on calendar grid
+          const ciClicked = await page.evaluate((match) => {
+            const el = Array.from(document.querySelectorAll('[aria-label]')).find(e => e.getAttribute('aria-label').includes(match));
+            if (el) { el.click(); return true; }
+            return false;
+          }, ciMatch);
+          console.log(`[Dates] Check-in cell clicked (${ciMatch}): ${ciClicked}`);
           await page.waitForTimeout(500);
 
-          // Fill Check-out date
-          await checkOutLocator.fill(checkOutFormatted);
-          await page.waitForTimeout(200);
-          await page.keyboard.press('Enter');
+          // 3. Click Check-out cell on calendar grid
+          const coClicked = await page.evaluate((match) => {
+            const el = Array.from(document.querySelectorAll('[aria-label]')).find(e => e.getAttribute('aria-label').includes(match));
+            if (el) { el.click(); return true; }
+            return false;
+          }, coMatch);
+          console.log(`[Dates] Check-out cell clicked (${coMatch}): ${coClicked}`);
           await page.waitForTimeout(500);
-          
-          // Dismiss calendar popup again
+
+          // 4. Click "Done" button if present, or Escape to close modal
+          await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button'));
+            const doneBtn = btns.find(b => b.textContent.trim().toLowerCase() === 'done');
+            if (doneBtn) doneBtn.click();
+          });
           await page.keyboard.press('Escape');
-          
-          // Wait for the new rates to load
+
+          console.log(`[Dates] Waiting for rates to reload...`);
           await page.waitForTimeout(5000);
+
+          // Verify final active dates
+          const verifiedDates = await page.evaluate(() => {
+            const ciInputs = Array.from(document.querySelectorAll('input')).filter(i => (i.getAttribute('aria-label') === 'Check-in' || i.getAttribute('placeholder') === 'Check-in') && i.offsetWidth > 0);
+            const coInputs = Array.from(document.querySelectorAll('input')).filter(i => (i.getAttribute('aria-label') === 'Check-out' || i.getAttribute('placeholder') === 'Check-out') && i.offsetWidth > 0);
+            const activeCI = ciInputs.pop();
+            const activeCO = coInputs.pop();
+            return {
+              checkIn: activeCI ? activeCI.value : 'NOT FOUND',
+              checkOut: activeCO ? activeCO.value : 'NOT FOUND'
+            };
+          });
+          console.log(`[Dates] Verified - Check-in: ${verifiedDates.checkIn}, Check-out: ${verifiedDates.checkOut}`);
         }
       } catch (dateErr) {
         console.error(`Failed to change search dates for ${hotel.name}:`, dateErr.message);
       }
     }
 
-    // Evaluate the page content in the browser context to parse partner pricing rows
-    const parsedPrices = await page.evaluate(() => {
-      const list = [];
-      const seen = new Set();
+    // Helper function to parse pricing options from page
+    const parsePricesFromPage = async () => {
+      const resList = await page.evaluate(() => {
+        const list = [];
+        const seen = new Set();
 
-      const elements = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
-      
-      elements.forEach(el => {
-        const text = (el.textContent || '').trim();
-        const ariaLabel = el.getAttribute('aria-label') || '';
+        const elements = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
         
-        const isVisitButton = text === 'Visit site' || text === 'Visit official site' || ariaLabel.toLowerCase().includes('visit site');
-        
-        if (isVisitButton) {
-          let container = el;
-          for (let i = 0; i < 5; i++) {
-            if (container.parentElement) {
-              container = container.parentElement;
-            }
-          }
+        elements.forEach(el => {
+          const text = (el.textContent || '').trim();
+          const ariaLabel = el.getAttribute('aria-label') || '';
           
-          const containerText = (container.textContent || '').trim().replace(/\s+/g, ' ');
+          const isVisitButton = text === 'Visit site' || text === 'Visit official site' || ariaLabel.toLowerCase().includes('visit site');
           
-          let partner = '';
-          const matchAria = ariaLabel.match(/Visit site for\s+(.+)/i);
-          if (matchAria && matchAria[1]) {
-            partner = matchAria[1].trim();
-          } else {
-            const knownPartners = [
-              'Booking.com', 'Agoda', 'MakeMyTrip.com', 'MakeMyTrip', 'Official Site', 'Official site',
-              'Goibibo.com', 'Goibibo', 'Cleartrip.com', 'Cleartrip', 'Yatra.com', 'Yatra',
-              'EaseMyTrip.com', 'EaseMyTrip', 'Expedia.co.in', 'Expedia.com', 'Expedia', 
-              'Hotels.com', 'Tripadvisor.in', 'Tripadvisor.com', 'Tripadvisor', 
-              'Akbartravels.com', 'Akbartravels', 'Vio.com', 'Wego', 'ZenHotels.com', 'Skyscanner'
-            ];
-            
-            for (const kp of knownPartners) {
-              if (containerText.includes(kp)) {
-                partner = kp;
-                break;
+          if (isVisitButton) {
+            let container = el;
+            for (let i = 0; i < 5; i++) {
+              if (container.parentElement) {
+                container = container.parentElement;
               }
             }
-            if (!partner) {
-              partner = containerText.split(/Total per night|Free Wi-Fi|Free cancellation/i)[0].trim();
-            }
-          }
-
-          if (partner.toLowerCase().includes('official site')) {
-            partner = 'Official Site';
-          }
-          if (partner.includes('Official Site') || partner.includes('Official site')) {
-            partner = 'Official Site';
-          }
-
-          const priceRegex = /[₹$]\s*[0-9,]+/g;
-          const prices = containerText.match(priceRegex) || [];
-          
-          if (partner && prices.length > 0) {
-            const priceVal = prices[0].replace(/\s+/g, '');
             
-            let standardPartner = partner;
-            if (partner.toLowerCase() === 'makemytrip') standardPartner = 'MakeMyTrip.com';
-            if (partner.toLowerCase() === 'goibibo') standardPartner = 'Goibibo.com';
-            if (partner.toLowerCase() === 'cleartrip') standardPartner = 'Cleartrip.com';
-            if (partner.toLowerCase() === 'easemytrip') standardPartner = 'EaseMyTrip.com';
-            if (standardPartner.length > 30) standardPartner = standardPartner.substring(0, 30);
+            const containerText = (container.textContent || '').trim().replace(/\s+/g, ' ');
+            
+            let partner = '';
+            const matchAria = ariaLabel.match(/Visit site for\s+(.+)/i);
+            if (matchAria && matchAria[1]) {
+              partner = matchAria[1].trim();
+            } else {
+              const knownPartners = [
+                'Booking.com', 'Agoda', 'MakeMyTrip.com', 'MakeMyTrip', 'Official Site', 'Official site',
+                'Goibibo.com', 'Goibibo', 'Cleartrip.com', 'Cleartrip', 'Yatra.com', 'Yatra',
+                'EaseMyTrip.com', 'EaseMyTrip', 'Expedia.co.in', 'Expedia.com', 'Expedia', 
+                'Hotels.com', 'Tripadvisor.in', 'Tripadvisor.com', 'Tripadvisor', 
+                'Akbartravels.com', 'Akbartravels', 'Vio.com', 'Wego', 'ZenHotels.com', 'Skyscanner'
+              ];
+              
+              for (const kp of knownPartners) {
+                if (containerText.includes(kp)) {
+                  partner = kp;
+                  break;
+                }
+              }
+              if (!partner) {
+                partner = containerText.split(/Total per night|Free Wi-Fi|Free cancellation/i)[0].trim();
+              }
+            }
 
-            const key = `${standardPartner.toLowerCase()}_${priceVal}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              list.push({
-                partner: standardPartner,
-                price: priceVal,
-                rawPrice: parseInt(priceVal.replace(/[^0-9]/g, ''), 10)
-              });
+            if (partner.toLowerCase().includes('official site')) {
+              partner = 'Official Site';
+            }
+            if (partner.includes('Official Site') || partner.includes('Official site')) {
+              partner = 'Official Site';
+            }
+
+            const priceRegex = /[₹$]\s*[0-9,]+/g;
+            const prices = containerText.match(priceRegex) || [];
+            
+            if (partner && prices.length > 0) {
+              const priceVal = prices[0].replace(/\s+/g, '');
+              
+              let standardPartner = partner;
+              if (partner.toLowerCase() === 'makemytrip') standardPartner = 'MakeMyTrip.com';
+              if (partner.toLowerCase() === 'goibibo') standardPartner = 'Goibibo.com';
+              if (partner.toLowerCase() === 'cleartrip') standardPartner = 'Cleartrip.com';
+              if (partner.toLowerCase() === 'easemytrip') standardPartner = 'EaseMyTrip.com';
+              if (standardPartner.length > 30) standardPartner = standardPartner.substring(0, 30);
+
+              const key = `${standardPartner.toLowerCase()}_${priceVal}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                list.push({
+                  partner: standardPartner,
+                  price: priceVal,
+                  rawPrice: parseInt(priceVal.replace(/[^0-9]/g, ''), 10)
+                });
+              }
             }
           }
+        });
+        
+        // Secondary parser fallback for card list views when Visit site buttons are absent
+        if (list.length === 0) {
+          const cards = Array.from(document.querySelectorAll('a, div[role="button"]'));
+          cards.forEach(c => {
+            const aria = c.getAttribute('aria-label') || '';
+            const text = (c.textContent || '').trim().replace(/\s+/g, ' ');
+            
+            if (aria.includes('Prices starting from') || text.includes('Agoda') || text.includes('Booking.com') || text.includes('MakeMyTrip') || text.includes('Goibibo')) {
+              const priceMatch = text.match(/[₹$]\s*[0-9,]+/);
+              if (priceMatch) {
+                const priceVal = priceMatch[0].replace(/\s+/g, '');
+                let partner = 'Google Travel Rate';
+                const knownPartners = ['Agoda', 'Booking.com', 'MakeMyTrip.com', 'MakeMyTrip', 'Goibibo.com', 'Goibibo', 'Cleartrip', 'Yatra', 'EaseMyTrip', 'Expedia'];
+                for (const kp of knownPartners) {
+                  if (text.includes(kp)) { partner = kp; break; }
+                }
+                const key = `${partner.toLowerCase()}_${priceVal}`;
+                if (!seen.has(key)) {
+                  seen.add(key);
+                  list.push({
+                    partner: partner,
+                    price: priceVal,
+                    rawPrice: parseInt(priceVal.replace(/[^0-9]/g, ''), 10)
+                  });
+                }
+              }
+            }
+          });
         }
+        
+        return list;
       });
-      
-      return list;
-    });
+      return resList.sort((a, b) => a.rawPrice - b.rawPrice);
+    };
 
-    parsedPrices.sort((a, b) => a.rawPrice - b.rawPrice);
+    let parsedPrices = await parsePricesFromPage();
+
+    // Fallback: If 0 prices parsed (e.g. list view side drawer collapsed), click hotel card heading to open drawer & retry
+    if (parsedPrices.length === 0) {
+      console.log(`[Parse Fallback] 0 options parsed. Re-triggering hotel card click for ${hotel.name}...`);
+      await page.evaluate((name) => {
+        const headings = Array.from(document.querySelectorAll('h2'));
+        const firstWord = name.toLowerCase().split(' ')[0];
+        const targetH2 = headings.find(h2 => h2.textContent.toLowerCase().includes(firstWord));
+        if (targetH2) {
+          const anchor = targetH2.closest('a');
+          if (anchor) anchor.click(); else targetH2.click();
+        }
+      }, hotel.name);
+      await page.waitForTimeout(6000);
+      parsedPrices = await parsePricesFromPage();
+    }
 
     // Extract dates metadata
     const dates = await page.evaluate(() => {
