@@ -29,14 +29,23 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
 
   let browser;
   try {
-    browser = await chromium.launch({
+    const launchOptions = {
       headless: true,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-blink-features=AutomationControlled'
       ]
-    });
+    };
+
+    if (process.env.PROXY_URL) {
+      launchOptions.proxy = {
+        server: process.env.PROXY_URL
+      };
+      console.log(`Routing Playwright browser traffic through proxy...`);
+    }
+
+    browser = await chromium.launch(launchOptions);
 
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
