@@ -39,8 +39,9 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
     };
 
     if (process.env.PROXY_URL) {
+      const cleanProxyUrl = process.env.PROXY_URL.replace(/\s+/g, '');
       try {
-        const urlObj = new URL(process.env.PROXY_URL);
+        const urlObj = new URL(cleanProxyUrl);
         launchOptions.proxy = {
           server: `${urlObj.protocol}//${urlObj.host}`
         };
@@ -54,7 +55,7 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
       } catch (err) {
         console.warn(`Failed to parse PROXY_URL using URL parser, falling back to raw value:`, err.message);
         launchOptions.proxy = {
-          server: process.env.PROXY_URL
+          server: cleanProxyUrl
         };
       }
     }
