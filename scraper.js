@@ -419,67 +419,40 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
         const list = [];
         const seen = new Set();
 
-        const elements = Array.from(document.querySelectorAll('button, a, div[role="button"]'));
-        
-        elements.forEach(el => {
-          const text = (el.textContent || '').trim();
-          const ariaLabel = el.getAttribute('aria-label') || '';
+        const knownPartners = [
+          'Booking.com', 'Agoda', 'MakeMyTrip.com', 'MakeMyTrip', 'Official website', 'Official site',
+          'Expedia.co.in', 'Expedia.com', 'Expedia', 'Akbartravels.com', 'Akbartravels', 'Goibibo.com', 'Goibibo',
+          'Cleartrip.com', 'Cleartrip', 'Yatra.com', 'Yatra', 'EaseMyTrip.com', 'EaseMyTrip', 'Tripadvisor.in',
+          'Tripadvisor.com', 'Tripadvisor', 'Hotels.com', 'Vio.com', 'Wego', 'ZenHotels.com', 'Skyscanner',
+          'Bluepillow.in', 'Bluepillow.nl', 'goseek.com', 'Traveloka.com', 'HomeToGo', 'Qantas Hotels'
+        ];
+
+        const allContainers = Array.from(document.querySelectorAll('a, button, div[role="button"], div[jsaction], div'));
+
+        allContainers.forEach(container => {
+          const text = (container.textContent || '').trim().replace(/\s+/g, ' ');
+          const aria = container.getAttribute('aria-label') || '';
           
-          const isVisitButton = text === 'Visit site' || text === 'Visit official site' || ariaLabel.toLowerCase().includes('visit site');
-          
-          if (isVisitButton) {
-            let container = el;
-            for (let i = 0; i < 5; i++) {
-              if (container.parentElement) {
-                container = container.parentElement;
-              }
-            }
-            
-            const containerText = (container.textContent || '').trim().replace(/\s+/g, ' ');
-            
+          if (text.length > 250) return;
+
+          const prices = text.match(/₹\s*[0-9,.]+|[0-9,.]+\s*(?:EUR|USD|INR|GBP)/g) || [];
+          if (prices.length > 0) {
             let partner = '';
-            const matchAria = ariaLabel.match(/Visit site for\s+(.+)/i);
-            if (matchAria && matchAria[1]) {
-              partner = matchAria[1].trim();
-            } else {
-              const knownPartners = [
-                'Booking.com', 'Agoda', 'MakeMyTrip.com', 'MakeMyTrip', 'Official Site', 'Official site',
-                'Goibibo.com', 'Goibibo', 'Cleartrip.com', 'Cleartrip', 'Yatra.com', 'Yatra',
-                'EaseMyTrip.com', 'EaseMyTrip', 'Expedia.co.in', 'Expedia.com', 'Expedia', 
-                'Hotels.com', 'Tripadvisor.in', 'Tripadvisor.com', 'Tripadvisor', 
-                'Akbartravels.com', 'Akbartravels', 'Vio.com', 'Wego', 'ZenHotels.com', 'Skyscanner'
-              ];
-              
-              for (const kp of knownPartners) {
-                if (containerText.includes(kp)) {
-                  partner = kp;
-                  break;
-                }
-              }
-              if (!partner) {
-                partner = containerText.split(/Total per night|Free Wi-Fi|Free cancellation/i)[0].trim();
+            for (const kp of knownPartners) {
+              if (text.includes(kp) || aria.includes(kp)) {
+                partner = kp;
+                break;
               }
             }
 
-            if (partner.toLowerCase().includes('official site')) {
-              partner = 'Official Site';
-            }
-            if (partner.includes('Official Site') || partner.includes('Official site')) {
-              partner = 'Official Site';
-            }
-
-            const priceRegex = /[₹$€£]\s*[0-9,.]+|[0-9,.]+\s*(?:EUR|USD|INR|GBP)/g;
-            const prices = containerText.match(priceRegex) || [];
-            
-            if (partner && prices.length > 0) {
+            if (partner) {
               const priceVal = prices[0].replace(/\s+/g, '');
-              
               let standardPartner = partner;
               if (partner.toLowerCase() === 'makemytrip') standardPartner = 'MakeMyTrip.com';
               if (partner.toLowerCase() === 'goibibo') standardPartner = 'Goibibo.com';
               if (partner.toLowerCase() === 'cleartrip') standardPartner = 'Cleartrip.com';
               if (partner.toLowerCase() === 'easemytrip') standardPartner = 'EaseMyTrip.com';
-              if (standardPartner.length > 30) standardPartner = standardPartner.substring(0, 30);
+              if (partner.toLowerCase().includes('official')) standardPartner = 'Official Site';
 
               const key = `${standardPartner.toLowerCase()}_${priceVal}`;
               if (!seen.has(key)) {
@@ -493,40 +466,10 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
             }
           }
         });
-        
-        // Secondary parser fallback for card list views when Visit site buttons are absent
-        if (list.length === 0) {
-          const cards = Array.from(document.querySelectorAll('a, div[role="button"]'));
-          cards.forEach(c => {
-            const aria = c.getAttribute('aria-label') || '';
-            const text = (c.textContent || '').trim().replace(/\s+/g, ' ');
-            
-            if (aria.includes('Prices starting from') || text.includes('Agoda') || text.includes('Booking.com') || text.includes('MakeMyTrip') || text.includes('Goibibo')) {
-              const priceMatch = text.match(/[₹$€£]\s*[0-9,.]+|[0-9,.]+\s*(?:EUR|USD|INR|GBP)/);
-              if (priceMatch) {
-                const priceVal = priceMatch[0].replace(/\s+/g, '');
-                let partner = 'Google Travel Rate';
-                const knownPartners = ['Agoda', 'Booking.com', 'MakeMyTrip.com', 'MakeMyTrip', 'Goibibo.com', 'Goibibo', 'Cleartrip', 'Yatra', 'EaseMyTrip', 'Expedia'];
-                for (const kp of knownPartners) {
-                  if (text.includes(kp)) { partner = kp; break; }
-                }
-                const key = `${partner.toLowerCase()}_${priceVal}`;
-                if (!seen.has(key)) {
-                  seen.add(key);
-                  list.push({
-                    partner: partner,
-                    price: priceVal,
-                    rawPrice: parseInt(priceVal.replace(/[^0-9]/g, ''), 10)
-                  });
-                }
-              }
-            }
-          });
-        }
-        
-        return list;
+
+        return list.sort((a, b) => a.rawPrice - b.rawPrice);
       });
-      return resList.sort((a, b) => a.rawPrice - b.rawPrice);
+      return resList;
     };
 
     let parsedPrices = await parsePricesFromPage();
