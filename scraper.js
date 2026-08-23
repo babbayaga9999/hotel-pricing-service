@@ -119,19 +119,8 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
         '--disable-dev-shm-usage',
         '--disable-gpu',
         '--no-first-run',
-        '--no-zygote',
-        '--single-process',
         '--disable-extensions',
-        '--disable-component-extensions-with-background-pages',
-        '--disable-default-apps',
-        '--disable-features=TranslateUI',
-        '--disable-hang-monitor',
         '--disable-popup-blocking',
-        '--disable-prompt-on-repost',
-        '--disable-sync',
-        '--metrics-recording-only',
-        '--no-default-browser-check',
-        '--password-store=basic',
       ]
     };
 
@@ -159,12 +148,41 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
 
     browser = await chromium.launch(launchOptions);
 
-    // Create context with a realistic, modern Chrome fingerprint
+    // Create context with realistic Chrome User-Agent fingerprint
     const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       viewport: { width: 1366, height: 768 },
       locale: 'en-IN',
       timezoneId: 'Asia/Kolkata',
     });
+
+    // Pre-inject consent cookies to bypass Google's consent wall on cloud IPs
+    await context.addCookies([
+      {
+        name: 'SOCS',
+        value: 'CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjMwODI5MDEwMDAwUgJlbhgCGgYIgJnPpwY',
+        domain: '.google.com',
+        path: '/',
+      },
+      {
+        name: 'CONSENT',
+        value: 'PENDING+987',
+        domain: '.google.com',
+        path: '/',
+      },
+      {
+        name: 'SOCS',
+        value: 'CAISNQgDEitib3FfaWRlbnRpdHlmcm9udGVuZHVpc2VydmVyXzIwMjMwODI5MDEwMDAwUgJlbhgCGgYIgJnPpwY',
+        domain: '.google.co.in',
+        path: '/',
+      },
+      {
+        name: 'CONSENT',
+        value: 'PENDING+987',
+        domain: '.google.co.in',
+        path: '/',
+      },
+    ]);
 
     const page = await context.newPage();
 
