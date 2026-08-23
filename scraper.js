@@ -273,16 +273,21 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
     if (!isDetailView) {
       console.log(`Landed on search list page for ${hotel.name}. Seeking hotel card...`);
       
-      // Traverse headings on search results page to click correct card
+      // Traverse headings on search results page to click exact target hotel card
       const headingClicked = await page.evaluate((name) => {
-        const headings = Array.from(document.querySelectorAll('h2'));
-        const firstWord = name.toLowerCase().split(' ')[0];
-        for (const h2 of headings) {
-          if (h2.textContent.toLowerCase().includes(firstWord)) {
-            const anchor = h2.closest('a');
-            if (anchor) { anchor.click(); } else { h2.click(); }
-            return true;
-          }
+        const headings = Array.from(document.querySelectorAll('h2, h3, a, div[role="button"]'));
+        const lowerName = name.toLowerCase().trim();
+        const cleanName = lowerName.replace(/^the\s+/, '').trim(); // e.g. "orion elite"
+        
+        const target = headings.find(el => {
+          const txt = (el.textContent || '').toLowerCase().trim();
+          return txt.includes(cleanName) || txt.includes(lowerName);
+        });
+
+        if (target) {
+          const anchor = target.closest('a');
+          if (anchor) { anchor.click(); } else { target.click(); }
+          return true;
         }
         return false;
       }, hotel.name);
@@ -478,12 +483,13 @@ async function scrapeHotelPrices(hotel, targetCheckIn, targetCheckOut) {
     if (parsedPrices.length === 0) {
       console.log(`[Parse Fallback] 0 options parsed. Re-triggering hotel card click for ${hotel.name}...`);
       await page.evaluate((name) => {
-        const headings = Array.from(document.querySelectorAll('h2'));
-        const firstWord = name.toLowerCase().split(' ')[0];
-        const targetH2 = headings.find(h2 => h2.textContent.toLowerCase().includes(firstWord));
-        if (targetH2) {
-          const anchor = targetH2.closest('a');
-          if (anchor) anchor.click(); else targetH2.click();
+        const headings = Array.from(document.querySelectorAll('h2, h3, a, div[role="button"]'));
+        const lowerName = name.toLowerCase().trim();
+        const cleanName = lowerName.replace(/^the\s+/, '').trim();
+        const target = headings.find(el => (el.textContent || '').toLowerCase().includes(cleanName));
+        if (target) {
+          const anchor = target.closest('a');
+          if (anchor) anchor.click(); else target.click();
         }
       }, hotel.name);
       await page.waitForTimeout(6000);

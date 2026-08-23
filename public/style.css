@@ -509,6 +509,15 @@ body {
   font-size: 0.95rem;
 }
 
+/* Footer */
+.footer {
+  max-width: 1400px;
+  margin: 3rem auto 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
 .pulse-icon {
   color: var(--color-primary);
   opacity: 0.6;
@@ -719,4 +728,33 @@ body {
 /* Utility classes */
 .hidden {
   display: none !important;
+}
+
+/* Glowing Cheapest Rate Highlighting */
+.price-cell.cheapest {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #10b981 !important;
+  font-weight: 700 !important;
+}
+
+.lowest-highlight-pill {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  display: inline-block;
+}
+
+.cheapest-badge {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  color: #ffffff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
+  display: inline-block;
 }

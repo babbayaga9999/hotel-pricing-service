@@ -399,17 +399,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // We have successful prices!
-      // Find the absolute cheapest rate overall
-      let cheapestVal = Infinity;
-      let cheapestPartner = '';
-
-      result.prices.forEach(p => {
-        if (p.rawPrice < cheapestVal) {
-          cheapestVal = p.rawPrice;
-          cheapestPartner = p.partner;
-        }
-      });
+      // Find the absolute minimum price value across all returned options
+      const minPriceVal = Math.min(...result.prices.map(p => p.rawPrice));
+      const cheapestOption = result.prices.find(p => p.rawPrice === minPriceVal);
+      const cheapestPartnerName = cheapestOption ? cheapestOption.partner : '';
 
       // Render cells for standard columns (MakeMyTrip, Goibibo, Booking.com, Agoda, Cleartrip, Yatra, EaseMyTrip, Official Site)
       standardOTAs.forEach(ota => {
@@ -424,10 +417,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (priceObj) {
-          td.textContent = priceObj.price;
-          // Check if this OTA is the cheapest option
-          if (priceObj.partner === cheapestPartner) {
+          if (priceObj.rawPrice === minPriceVal) {
             td.className = 'price-cell cheapest';
+            td.innerHTML = `<span class="lowest-highlight-pill">⭐ ${priceObj.price}</span>`;
+          } else {
+            td.textContent = priceObj.price;
           }
         } else {
           td.textContent = '-';
@@ -438,11 +432,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Cheapest column
       const cheapestTd = document.createElement('td');
-      cheapestTd.className = 'price-cell';
-      const bestPriceObj = result.prices.find(p => p.partner === cheapestPartner);
+      cheapestTd.className = 'price-cell cheapest';
       
-      if (bestPriceObj) {
-        cheapestTd.innerHTML = `<span class="cheapest-badge">${bestPriceObj.price} (${cheapestPartner})</span>`;
+      if (cheapestOption) {
+        cheapestTd.innerHTML = `<span class="cheapest-badge">⭐ ${cheapestOption.price} (${cheapestPartnerName})</span>`;
       } else {
         cheapestTd.textContent = '-';
       }
