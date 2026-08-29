@@ -212,11 +212,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const response = await fetch('/api/scrape/status');
         const state = await response.json();
         updateScraperUI(state);
+        await fetchResults(); // reload table matrix live on every poll tick
         
         if (state.status === 'idle') {
           stopPolling();
           logToConsole('Scraper job completed.', 'success');
-          await fetchResults(); // reload table matrix
         }
       } catch (err) {
         console.error('Polling error:', err);
@@ -333,25 +333,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderComparisonMatrix() {
     comparisonTbody.innerHTML = '';
-    const hotelKeys = Object.keys(scrapeResults);
 
-    if (hotelKeys.length === 0) {
+    if (hotelsList.length === 0) {
       btnExportCsv.disabled = true;
       comparisonTbody.innerHTML = `
         <tr>
-          <td colspan="8" class="table-placeholder">
+          <td colspan="11" class="table-placeholder">
             <div class="placeholder-content">
               <svg viewBox="0 0 24 24" width="48" height="48" class="pulse-icon">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="currentColor"/>
               </svg>
-              <p>No pricing intelligence loaded. Run the scraper to populate details.</p>
+              <p>No hotels registered. Add a hotel to begin.</p>
             </div>
           </td>
         </tr>`;
       return;
     }
 
-    btnExportCsv.disabled = false;
+    const hasResults = Object.keys(scrapeResults).length > 0;
+    btnExportCsv.disabled = !hasResults;
 
     // Loop through each hotel in the registry to build the row
     hotelsList.forEach(hotel => {
